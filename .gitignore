@@ -1,0 +1,44 @@
+# Data files — never commit raw or processed participant data
+data/raw/
+data/processed/
+data/*.csv
+data/*.xlsx
+data/*.xls
+!data/data-dictionary.xlsx
+
+# Model outputs
+outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Log files
+*.log

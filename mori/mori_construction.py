@@ -1,3 +1,22 @@
+"""
+SCA Screening - MoRI Construction
+==================================
+Constructs one Modular Risk Index (MoRI) per acquisition module.
+
+Within each module:
+  1. Near-constant features are removed.
+  2. Missing values are imputed with the within-module median.
+  3. Features are standardised with z-score normalisation.
+  4. A fast Pearson correlation pre-screen retains the top 20 candidates.
+  5. L1-regularised logistic regression (3-fold CV) selects and weights features.
+  6. The MoRI is the resulting weighted linear combination.
+
+The 20 MoRIs are saved to OUTPUT_DIR/mori_dataset_K20.xlsx, which is the
+input expected by task3/task3_mori_ensemble.py.
+
+Author: Li Fan
+"""
+
 import os
 import warnings
 import numpy as np
@@ -16,8 +35,12 @@ warnings.filterwarnings("ignore")
 # =====================================================
 # Config
 # =====================================================
-INPUT_FILE = r"D:\科研\ais_multimodal_multitask_pipeline\data\processed\merged_all_sheets_v5.xlsx"
-OUTPUT_DIR = r"D:\科研\ais_multimodal_multitask_pipeline\outputs\phase4\risk_index_v5"
+# ── User Configuration ──────────────────────────────────────────────────────
+# INPUT_FILE: processed data file with all acquisition modules merged.
+# OUTPUT_DIR: directory where the MoRI dataset and feature report will be saved.
+INPUT_FILE = "data/processed/merged_all_sheets.xlsx"
+OUTPUT_DIR = "outputs/mori"
+# ────────────────────────────────────────────────────────────────────────────
 
 TARGET_COL = "sa_evaluation_result"
 
@@ -30,7 +53,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # =====================================================
 # Load data with optimization
 # =====================================================
-print("加载数据...")
+print("Loading data...")
 df = pd.read_excel(INPUT_FILE)
 
 df = df[df[TARGET_COL].notna()].copy()
@@ -44,7 +67,7 @@ if TARGET_COL in numeric_cols:
 # Optimized Module Risk Signature
 # =====================================================
 def process_module(prefix, df, numeric_cols, y):
-    """处理单个模块的函数，用于并行计算"""
+    """Construct the MoRI for a single acquisition module (called in parallel)."""
     module_cols = [c for c in numeric_cols if c.startswith(prefix)]
     
     if len(module_cols) < 3:
@@ -52,7 +75,7 @@ def process_module(prefix, df, numeric_cols, y):
     
     module_df = df[module_cols].copy()
     
-    # 快速去除低方差特征
+    # Drop near-constant features
     nunique = module_df.nunique()
     high_var_cols = nunique[nunique > 2].index
     module_df = module_df[high_var_cols]
@@ -60,34 +83,33 @@ def process_module(prefix, df, numeric_cols, y):
     if module_df.shape[1] < 3:
         return None, None
     
-    # 批量处理缺失值
+    # Median imputation
     imputer = SimpleImputer(strategy="median")
     X = imputer.fit_transform(module_df)
     
-    # 标准化
+    # Z-score standardisation
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
-    # 使用更快的特征选择方法
-    # 方法1：先用简单的相关性筛选
+    # Step 1: fast Pearson correlation pre-screen (top 20 features)
     correlations = np.array([np.corrcoef(X_scaled[:, i], y)[0, 1] for i in range(X_scaled.shape[1])])
-    top_features = np.argsort(np.abs(correlations))[-min(20, len(correlations)):]  # 最多选20个特征
+    top_features = np.argsort(np.abs(correlations))[-min(20, len(correlations)):]
     
     if len(top_features) < 2:
         return None, None
     
     X_filtered = X_scaled[:, top_features]
     
-    # 简化的L1逻辑回归（减少CV折数）
+    # Step 2: L1 logistic regression for final feature weighting
     try:
         selector = LogisticRegressionCV(
             penalty="l1",
             solver="liblinear",
-            cv=3,  # 从5降到3
+            cv=3,
             scoring="roc_auc",
-            max_iter=1000,  # 从2000降到1000
+            max_iter=1000,
             random_state=42,
-            n_jobs=1  # 避免嵌套并行
+            n_jobs=1  # Avoid nested parallelism
         )
         selector.fit(X_filtered, y)
         
@@ -95,7 +117,7 @@ def process_module(prefix, df, numeric_cols, y):
         selected_mask = coef != 0
         
         if selected_mask.sum() == 0:
-            # 如果没有选中的特征，使用相关性最高的特征
+            # Fallback: use the single most-correlated feature
             selected_mask = np.zeros_like(coef, dtype=bool)
             selected_mask[np.argmax(np.abs(correlations[top_features]))] = True
             coef = np.ones_like(coef)
@@ -103,10 +125,10 @@ def process_module(prefix, df, numeric_cols, y):
         selected_features = module_df.columns[top_features[selected_mask]]
         selected_coef = coef[selected_mask]
         
-        # 计算风险分数
+        # Compute the MoRI as a weighted linear combination
         module_score = np.dot(X_filtered[:, selected_mask], selected_coef)
         
-        # 准备报告
+        # Compile feature-level report for this module
         reports = []
         for feat, c in zip(selected_features, selected_coef):
             reports.append({
@@ -118,23 +140,23 @@ def process_module(prefix, df, numeric_cols, y):
         return module_score, reports
         
     except Exception as e:
-        print(f"模块 {prefix} 处理失败: {str(e)}")
+print(f"Module {prefix} failed: {str(e)}")
         return None, None
 
-# 并行处理所有模块
-print("开始处理模块（并行计算）...")
+# Parallel MoRI construction for all modules
+print("Constructing MoRIs for all modules in parallel...")
 results = Parallel(n_jobs=-1, verbose=10)(
     delayed(process_module)(prefix, df, numeric_cols, y) 
     for prefix in MODULE_PREFIXES
 )
 
-# 收集结果
+# Collect results
 risk_dataset = pd.DataFrame(index=df.index)
 module_reports = []
 
 for module_score, reports in results:
     if module_score is not None and reports is not None:
-        # 生成列名（需要确保唯一性）
+        # Generate unique column name
         base_name = f"{reports[0]['module']}risk_score"
         col_name = base_name
         counter = 1
@@ -145,45 +167,45 @@ for module_score, reports in results:
         module_reports.extend(reports)
 
 # =====================================================
-# 后处理：移除高度相关的风险分数
+# Post-processing: remove highly correlated MoRI scores
 # =====================================================
-print("后处理：移除冗余特征...")
+print("Post-processing: removing redundant MoRI scores...")
 if len(risk_dataset.columns) > 0:
-    # 计算相关性矩阵
+    # Compute pairwise correlation matrix
     corr_matrix = risk_dataset.corr().abs()
     upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
     
-    # 删除相关性>0.95的特征
+    # Drop one of each pair with |r| > 0.95
     to_drop = [column for column in upper_tri.columns if any(upper_tri[column] > 0.95)]
     risk_dataset = risk_dataset.drop(columns=to_drop)
-    print(f"移除了 {len(to_drop)} 个高度相关的风险分数")
+    print(f"Removed {len(to_drop)} highly correlated MoRI score(s)")
 
 # =====================================================
 # Save outputs
 # =====================================================
 risk_dataset[TARGET_COL] = y.values
 
-risk_output = os.path.join(OUTPUT_DIR, "module_risk_dataset_v2.xlsx")
-report_output = os.path.join(OUTPUT_DIR, "module_feature_report_v2.xlsx")
+risk_output = os.path.join(OUTPUT_DIR, "mori_dataset_K20.xlsx")
+report_output = os.path.join(OUTPUT_DIR, "mori_feature_report.xlsx")
 
-print("保存结果...")
+print("Saving outputs...")
 risk_dataset.to_excel(risk_output, index=False)
 pd.DataFrame(module_reports).to_excel(report_output, index=False)
 
-print(f"模块风险数据已保存: {risk_output}")
-print(f"模块特征报告已保存: {report_output}")
-print(f"生成的风险分数数量: {len(risk_dataset.columns)-1}")
+print(f"MoRI dataset saved to: {risk_output}")
+print(f"Module feature report saved to: {report_output}")
+print(f"Number of MoRI scores generated: {len(risk_dataset.columns)-1}")
 
 # =====================================================
 # Quick baseline training with early stopping
 # =====================================================
 if len(risk_dataset) > 0 and len(risk_dataset.columns) > 1:
-    print("\n开始交叉验证...")
+    print("\nRunning 10-fold cross-validation on the MoRI dataset...")
     X_risk = risk_dataset.drop(columns=[TARGET_COL])
     
-    # 如果特征太多，进一步降维
+    # Dimensionality reduction guard (should not be needed for ≤20 MoRIs)
     if X_risk.shape[1] > 50:
-        print(f"特征数量({X_risk.shape[1]})过多，进行PCA降维...")
+        print(f"Feature count ({X_risk.shape[1]}) exceeds 50; applying PCA.")
         from sklearn.decomposition import PCA
         pca = PCA(n_components=min(50, X_risk.shape[0]//2))
         X_risk = pd.DataFrame(pca.fit_transform(X_risk))
@@ -205,6 +227,6 @@ if len(risk_dataset) > 0 and len(risk_dataset.columns) > 1:
         aucs.append(auc)
         print(f"Fold {fold+1}/10: AUC = {auc:.4f}")
     
-    print(f"\n模块风险模型 10-fold AUC = {np.mean(aucs):.4f} ± {np.std(aucs):.4f}")
+    print(f"\nMoRI baseline 10-fold AUC = {np.mean(aucs):.4f} ± {np.std(aucs):.4f}")
 else:
-    print("\n警告：没有生成有效的风险分数，跳过交叉验证")
+    print("\nWARNING: No valid MoRI scores were generated; skipping cross-validation.")

@@ -1,13 +1,13 @@
 """
-AIS Risk Prediction - Phase 1: body_composition Module Single-Task Risk Modeling
+SCA Screening - Task 1: Balance Module
 ================================================================================
-This script performs binary classification for AIS risk prediction using
-body_composition features with strict 10-fold cross-validation to avoid data leakage.
+This script performs binary classification for SCA screening using
+balance features with strict 10-fold cross-validation to avoid data leakage.
 All 7 models share the same feature selector per fold for global feature stability analysis.
 
-Author: AI Assistant
+Author: Li Fan
 Date: 2026-04-01
-Version: 2.1 (Updated to output specific metrics: AUC(95% CI), Sensitivity, Specificity, Precision, F1)
+Version: 1.0
 """
 
 import numpy as np
@@ -59,10 +59,14 @@ rcParams['axes.spines.top'] = False
 rcParams['axes.spines.right'] = False
 
 # Define paths
-DATA_PATH = r"D:\科研\ais_multimodal_multitask_pipeline\data\processed\merged_all_sheets_v2.xlsx"
-OUTPUT_DIR = r"D:\科研\ais_multimodal_multitask_pipeline\outputs\phase1\v3"
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "body_composition_benchmark_results.xlsx")
-ROC_PLOT_FILE = os.path.join(OUTPUT_DIR, "body_composition_roc_curves.png")
+# ── User Configuration ──────────────────────────────────────────────────────
+# Set DATA_PATH to your processed data file (merged across all acquisition modules).
+# Set OUTPUT_DIR to the directory where results will be saved.
+DATA_PATH = "data/processed/merged_all_sheets.xlsx"
+OUTPUT_DIR = "outputs/task1"
+# ────────────────────────────────────────────────────────────────────────────
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "balance_benchmark_results.xlsx")
+ROC_PLOT_FILE = os.path.join(OUTPUT_DIR, "balance_roc_curves.png")
 
 # Create output directory if it doesn't exist
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -81,7 +85,10 @@ def load_and_prepare_data(filepath):
     print(f"Raw data shape: {df.shape}")
     
     # Separate features and target
-    feature_cols = [col for col in df.columns if col.startswith('bc_')]
+    # Identify feature columns for balance module (multiple prefixes)
+    feature_cols = [col for col in df.columns if any(col.startswith(prefix) for prefix in [
+        'bsn_', 'bsu_', 'bsp_', 'bsec_', 'bscl_', 'bsb_', 'bsts_', 'bf_','bsn2_','bsu2_'
+    ])]
     target_col = 'sa_evaluation_result'
     
     if target_col not in df.columns:
@@ -372,7 +379,11 @@ def run_cross_validation(X, y, feature_names, n_folds=10):
         auc_mean = np.mean(model_results[model_name]['auc'])
         auc_std = np.std(model_results[model_name]['auc'])
         
-        # Calculate 95% Confidence Interval based on Standard Error
+        # NOTE: The AUC 95% CI here uses fold-level standard error (SE method):
+        #   CI = mean ± 1.96 * std/sqrt(n_folds)
+        # This differs from the bootstrap resampling method reported in the paper
+        # (Methods §2.6). The SE method is a close approximation for n_folds=10
+        # and is retained here for computational efficiency.
         ci_margin = 1.96 * (auc_std / np.sqrt(n_folds))
         auc_lower = max(0.0, auc_mean - ci_margin)
         auc_upper = min(1.0, auc_mean + ci_margin)
@@ -547,7 +558,7 @@ def plot_roc_curves(results, output_file):
     ax.set_ylim([0.0, 1.05])
     ax.set_xlabel('False Positive Rate', fontsize=12, fontweight='bold')
     ax.set_ylabel('True Positive Rate', fontsize=12, fontweight='bold')
-    ax.set_title('ROC Curves - body_composition Module Models', fontsize=14, fontweight='bold', pad=20)
+    ax.set_title('ROC Curves - Balance Module', fontsize=14, fontweight='bold', pad=20)
     
     # Add legend
     ax.legend(loc='lower right', fontsize=9, frameon=True, fancybox=True, 
@@ -624,7 +635,7 @@ def main():
     Main execution function
     """
     print("="*80)
-    print("AIS RISK PREDICTION - PHASE 1: body_composition MODULE")
+    print("SCA SCREENING - TASK 1: balance MODULE")
     print("="*80)
     print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Random seed: {SEED}")

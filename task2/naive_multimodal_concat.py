@@ -1,13 +1,14 @@
 """
-AIS Risk Prediction - Phase 1: Questionnaire Module Binary Classification
+SCA Screening - Task 2: Multimodal Naive Concatenation
 ===============================================================
-Author: Research Team
+Author: Li Fan
 Date: 2026-04-07
 Description: 
     This script performs strict 10-fold cross-validation for 7 machine learning models
-    on questionnaire data to predict AIS risk. Implements rigorous feature selection
+    on all-module concatenated data for SCA screening. Implements rigorous feature selection
     within each fold to prevent data leakage.
-    关键点：选择selected_frequency ≥ 0.7的17个变量作为输入的x
+    Key point: features with selection_frequency > 0.6 across 10 folds are retained
+    (17 features in the study cohort, per Methods §2.5).
 
 Models:
     - Logistic Regression (LR)
@@ -60,8 +61,12 @@ RANDOM_STATE = 42
 np.random.seed(RANDOM_STATE)
 
 # Configuration
-DATA_PATH = r"D:\科研\ais_multimodal_multitask_pipeline\data\processed\merged_all_sheets.xlsx"
-OUTPUT_DIR = r"D:\科研\ais_multimodal_multitask_pipeline\outputs\phase2\v4"
+# ── User Configuration ──────────────────────────────────────────────────────
+# DATA_PATH: processed data file with all acquisition modules merged.
+# OUTPUT_DIR: directory where results (Excel + ROC plot) will be saved.
+DATA_PATH = "data/processed/merged_all_sheets.xlsx"
+OUTPUT_DIR = "outputs/task2"
+# ────────────────────────────────────────────────────────────────────────────
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "allData_benchmark_results_v4.3.xlsx")
 ROC_IMAGE = os.path.join(OUTPUT_DIR, "allData_roc_curves_v4.3.png")
 MISSING_THRESHOLD = 0.32  # 32% missing data threshold
@@ -791,7 +796,7 @@ def main() -> None:
     """Main execution function."""
     start_time = datetime.now()
     logger.info("="*80)
-    logger.info("AIS Risk Prediction - Phase 1: Questionnaire Module")
+    logger.info("SCA Screening - Task 2: Multimodal Naive Concatenation")
     logger.info(f"Started at: {start_time}")
     logger.info("="*80)
     

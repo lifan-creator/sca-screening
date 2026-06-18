@@ -1,13 +1,13 @@
 """
-AIS Risk Prediction - Phase 1: cervical_rom Module Single-Task Risk Modeling
+SCA Screening - Task 1: Cervical Range of Motion Module
 ================================================================================
-This script performs binary classification for AIS risk prediction using
+This script performs binary classification for SCA screening using
 cervical_rom features with strict 10-fold cross-validation to avoid data leakage.
 All 7 models share the same feature selector per fold for global feature stability analysis.
 
-Author: AI Assistant
+Author: Li Fan
 Date: 2026-04-01
-Version: 2.1 (Updated to output specific metrics: AUC(95% CI), Sensitivity, Specificity, Precision, F1)
+Version: 1.0
 """
 
 import numpy as np
@@ -59,8 +59,12 @@ rcParams['axes.spines.top'] = False
 rcParams['axes.spines.right'] = False
 
 # Define paths
-DATA_PATH = r"D:\科研\ais_multimodal_multitask_pipeline\data\processed\merged_all_sheets_v2.xlsx"
-OUTPUT_DIR = r"D:\科研\ais_multimodal_multitask_pipeline\outputs\phase1\v3"
+# ── User Configuration ──────────────────────────────────────────────────────
+# Set DATA_PATH to your processed data file (merged across all acquisition modules).
+# Set OUTPUT_DIR to the directory where results will be saved.
+DATA_PATH = "data/processed/merged_all_sheets.xlsx"
+OUTPUT_DIR = "outputs/task1"
+# ────────────────────────────────────────────────────────────────────────────
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "cervical_rom_benchmark_results.xlsx")
 ROC_PLOT_FILE = os.path.join(OUTPUT_DIR, "cervical_rom_roc_curves.png")
 
@@ -372,7 +376,11 @@ def run_cross_validation(X, y, feature_names, n_folds=10):
         auc_mean = np.mean(model_results[model_name]['auc'])
         auc_std = np.std(model_results[model_name]['auc'])
         
-        # Calculate 95% Confidence Interval based on Standard Error
+        # NOTE: The AUC 95% CI here uses fold-level standard error (SE method):
+        #   CI = mean ± 1.96 * std/sqrt(n_folds)
+        # This differs from the bootstrap resampling method reported in the paper
+        # (Methods §2.6). The SE method is a close approximation for n_folds=10
+        # and is retained here for computational efficiency.
         ci_margin = 1.96 * (auc_std / np.sqrt(n_folds))
         auc_lower = max(0.0, auc_mean - ci_margin)
         auc_upper = min(1.0, auc_mean + ci_margin)
@@ -547,7 +555,7 @@ def plot_roc_curves(results, output_file):
     ax.set_ylim([0.0, 1.05])
     ax.set_xlabel('False Positive Rate', fontsize=12, fontweight='bold')
     ax.set_ylabel('True Positive Rate', fontsize=12, fontweight='bold')
-    ax.set_title('ROC Curves - cervical_rom Module Models', fontsize=14, fontweight='bold', pad=20)
+    ax.set_title('ROC Curves - Cervical ROM Module', fontsize=14, fontweight='bold', pad=20)
     
     # Add legend
     ax.legend(loc='lower right', fontsize=9, frameon=True, fancybox=True, 
@@ -624,7 +632,7 @@ def main():
     Main execution function
     """
     print("="*80)
-    print("AIS RISK PREDICTION - PHASE 1: cervical_rom MODULE")
+    print("SCA SCREENING - TASK 1: cervical_rom MODULE")
     print("="*80)
     print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Random seed: {SEED}")

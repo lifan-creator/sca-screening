@@ -1,0 +1,22 @@
+# Core scientific stack
+numpy>=1.23.0
+pandas>=1.5.0
+scipy>=1.9.0
+scikit-learn>=1.2.0
+
+# Gradient boosting
+xgboost>=1.7.0
+lightgbm>=3.3.0
+
+# Explainability
+shap>=0.41.0
+
+# Excel I/O
+openpyxl>=3.0.10
+xlrd>=2.0.1
+
+# Plotting
+matplotlib>=3.6.0
+
+# Parallel processing
+joblib>=1.2.0
