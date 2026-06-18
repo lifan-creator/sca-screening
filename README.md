@@ -139,7 +139,7 @@ All scripts use `RANDOM_STATE = 42`. Results are obtained with stratified 10-fol
 
 ## Citation
 
-If you use this code, please cite the paper:
+If you use this code, please cite the paper(Not yet officially published):
 
 > Li Fan et al. "Development and Validation of Modular Risk Indices for Multimodal Spinal Curvature Abnormality Screening in Young Adults." *(Journal name, year, DOI.)*
 
